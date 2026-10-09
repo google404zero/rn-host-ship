@@ -32,7 +32,7 @@ jobs:
           python -m playwright install --with-deps chromium
 
       - name: ⚙ 设置代理 (自动选择 sing-box / Xray)
-        continue-on-error: true
+        continue-on-error: false
         env:
           NODE_LINK: ${{ secrets.NODE_LINK }}
         run: |
