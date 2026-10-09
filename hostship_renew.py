@@ -44,6 +44,22 @@ MANUAL_RUN = os.getenv(
 
 BJ_TZ = ZoneInfo("Asia/Shanghai")
 
+# 续期确认弹窗的文案，兼容新旧两版面板：
+# 新版标题 "Renew server" + 按钮 "Add 2 days"；旧版 "Confirm server renewal" + "Renew now"
+RENEW_DIALOG_TEXT = re.compile(
+    r"Confirm\s+server\s+renewal"
+    r"|Renew\s+server",
+    re.I,
+)
+
+RENEW_CONFIRM_BUTTON = re.compile(
+    r"^(?:Renew\s+now"
+    r"|Add\s+\d+\s+days?)$",
+    re.I,
+)
+
+RENEW_DIALOG_TIMEOUT_MS = 15000
+
 
 def log(msg):
     print(
@@ -657,37 +673,33 @@ def find_renew_button(page):
 def confirm_renewal(page):
     """Wait for the renewal dialog and click the real submit button."""
     title = page.get_by_text(
-        re.compile(
-            r"Confirm\s+server\s+renewal",
-            re.I,
-        )
+        RENEW_DIALOG_TEXT
     ).first
 
     try:
         title.wait_for(
             state="visible",
-            timeout=8000,
+            timeout=RENEW_DIALOG_TIMEOUT_MS,
         )
     except Exception:
         log("❌ 点击 Renew 后未出现续期确认弹窗")
         return False
 
+    dialog = page.get_by_role(
+        "dialog"
+    ).last
+
     confirm_buttons = [
-        page.get_by_role(
-            "dialog"
-        ).last.get_by_role(
+        dialog.get_by_role(
             "button",
-            name=re.compile(
-                r"^Renew\s+now$",
-                re.I,
-            ),
+            name=RENEW_CONFIRM_BUTTON,
         ),
         page.get_by_role(
             "button",
-            name=re.compile(
-                r"^Renew\s+now$",
-                re.I,
-            ),
+            name=RENEW_CONFIRM_BUTTON,
+        ),
+        dialog.locator(
+            'button:has-text("Add ")'
         ),
         page.locator(
             'button:has-text("Renew now")'
@@ -707,7 +719,8 @@ def confirm_renewal(page):
                 ):
                     log(
                         "✅ 确认弹窗已打开，"
-                        "点击 Renew now..."
+                        "点击 "
+                        f"{button.inner_text().strip()}..."
                     )
                     button.click()
                     return True
