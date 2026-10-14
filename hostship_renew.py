@@ -60,6 +60,32 @@ RENEW_CONFIRM_BUTTON = re.compile(
 
 RENEW_DIALOG_TIMEOUT_MS = 15000
 
+# 面板明确表示当前不可续期（已到续期上限）。
+# 新版："Maximum 14 days reached"；旧版："Renew Limit Reached"
+RENEW_LIMIT_TEXT = re.compile(
+    r"Renew\s+Limit\s+Reached"
+    r"|Maximum\s+\d+\s+days?\s+reached",
+    re.I,
+)
+
+# Renew 按钮文案，必须整名匹配，避免被 "no renewals" 之类的文案误命中
+RENEW_BUTTON_TEXT = re.compile(
+    r"^\s*Renew(?:\s+Now|\s+Server)?\s*$",
+    re.I,
+)
+
+RENEW_BUTTON_WORD = re.compile(
+    r"\bRenew\b",
+    re.I,
+)
+
+
+def renewal_blocked(text):
+    """面板是否已明确表示当前不可续期。"""
+    return bool(
+        RENEW_LIMIT_TEXT.search(text or "")
+    )
+
 
 def log(msg):
     print(
@@ -605,12 +631,14 @@ def get_renewal_text(page):
     ).inner_text()
 
     patterns = [
-        r"Renewal\s+in\s+\d+\s+Days?",
-        r"Renew\s+in\s+\d+\s+Days?",
-        r"\d+\s+Days?\s+until\s+renewal",
+        (r"Renewal\s+in\s+\d+\s+Days?", 0),
+        (r"Renew\s+in\s+\d+\s+Days?", 0),
+        (r"\d+\s+Days?\s+until\s+renewal", 0),
+        # 新版卡片："EXPIRES 12 NOV" 下方显示剩余天数
+        (r"EXPIRES\s+[\s\S]{0,24}?(\d+\s*Days?)", 1),
     ]
 
-    for pattern in patterns:
+    for pattern, group in patterns:
         match = re.search(
             pattern,
             text,
@@ -618,13 +646,9 @@ def get_renewal_text(page):
         )
 
         if match:
-            return match.group(0)
+            return match.group(group)
 
-    if re.search(
-        r"Renew\s+Limit\s+Reached",
-        text,
-        re.I,
-    ):
+    if renewal_blocked(text):
         return "Renew Limit Reached"
 
     return "未识别"
@@ -634,23 +658,21 @@ def find_renew_button(page):
     candidates = [
         page.get_by_role(
             "button",
-            name=re.compile(
-                r"^Renew(?:\s+Now|\s+Server)?$",
-                re.I,
-            ),
+            name=RENEW_BUTTON_TEXT,
         ),
         page.get_by_role(
             "link",
-            name=re.compile(
-                r"^Renew(?:\s+Now|\s+Server)?$",
-                re.I,
-            ),
+            name=RENEW_BUTTON_TEXT,
         ),
         page.locator(
-            'button:has-text("Renew")'
+            "button"
+        ).filter(
+            has_text=RENEW_BUTTON_WORD,
         ),
         page.locator(
-            'a:has-text("Renew")'
+            "a"
+        ).filter(
+            has_text=RENEW_BUTTON_WORD,
         ),
     ]
 
@@ -870,11 +892,7 @@ def main():
                 "body"
             ).inner_text()
 
-            if re.search(
-                r"Renew\s+Limit\s+Reached",
-                body,
-                re.I,
-            ):
+            if renewal_blocked(body):
                 log(
                     "⏳ 目前未到续期时间，"
                     "不进行操作"
@@ -950,7 +968,7 @@ def main():
                         "❌ Host-Ship 续期确认失败",
                         (
                             "点击第一层 Renew 后，"
-                            "未能点击确认弹窗中的 Renew now"
+                            "未能点击确认弹窗中的确认按钮"
                         ),
                         ip,
                     )
