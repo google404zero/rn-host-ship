@@ -4,10 +4,11 @@ on:
   workflow_dispatch:
 
   schedule:
-    # 每天北京时间 08:00 自动检查
-    # GitHub cron 使用 UTC
-    # UTC 00:00 = 北京时间 08:00
-    - cron: "0 0 * * *"
+    # 每 3 天自动检查一次，北京时间 08:00
+    # GitHub cron 使用 UTC：UTC 00:00 = 北京时间 08:00
+    # 注意：cron 的 */3 按「每月第几天」匹配，遇 31 天的月份时
+    # 当月 31 日到次月 1 日只间隔 1 天，其余间隔均为 3 天
+    - cron: "0 0 */3 * *"
 
 jobs:
   renew:
